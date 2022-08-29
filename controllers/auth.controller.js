@@ -1,4 +1,5 @@
 import { User } from "../models/User.js";
+import { generateRefreshToken, generateToken } from "../utils/tokenManager.js";
 import jwt from "jsonwebtoken";
 
 export const register = async (req, res) => {
@@ -40,14 +41,56 @@ export const login = async (req, res) => {
     }
 
     // Generar el JWT token
-    const token = jwt.sign(
-      { uid: responsePassword._id },
-      process.env.JWT_SECRET
-    );
+    const { token, expiresIn } = generateToken(userEmail.id);
+    generateRefreshToken(userEmail.id, res);
 
-    return res.json({ token });
+    //res.cookie(token);
+
+    return res.json({ token, expiresIn });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ error: "Error de servidor" });
   }
+};
+
+export const infouser = async (req, res) => {
+  try {
+    const user = await User.findById(req.uid).lean();
+    return res.json({ email: user.email, uid: user._id });
+  } catch (error) {
+    console.log(error.message);
+    return res
+      .status(500)
+      .json({ error: "Error de servidor", msg: error.message });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  try {
+    const refreshTokenCookie = req.cookies.refreshToken;
+    if (!refreshTokenCookie) throw new Error("No existe el token");
+
+    const { uid } = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH);
+
+    const token = generateToken(uid);
+    res.json(token);
+  } catch (error) {
+    console.log(error.message);
+    const TokenVerificationErrors = {
+      "invalid signature": "La firma del JWT no es válida",
+      "jwt expired": "JWT expirado",
+      "invalid token": "Token no valido",
+      "No Bearer": "Utiliza formato Bearer",
+      "jwt malformed": "JWT formato no valido",
+    };
+
+    return res
+      .status(401)
+      .json({ error: TokenVerificationErrors[error.message] });
+  }
+};
+
+export const logout = (req, res) => {
+  res.clearCookie("refreshToken");
+  res.json({ ok: true });
 };
