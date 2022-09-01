@@ -14,13 +14,20 @@ export const register = async (req, res) => {
     }
 
     const userStore = await user.save();
-    return res.status(201).json({ userStore, ok: true });
+
+    // Generar el JWT token
+    const { token, expiresIn } = generateToken(userStore._id);
+    generateRefreshToken(userStore._id, res);
+
+    return res.status(201).json({ token, expiresIn });
   } catch (error) {
     console.log(error);
     if (error.code === 11000) {
       return res.status(400).json({ error: "Ya existe este usuario" });
     }
-    return res.status(500).json({ error: "Error de servidor" });
+    return res
+      .status(500)
+      .json({ error: "Error de servidor", msg: error.message });
   }
 };
 export const login = async (req, res) => {
@@ -67,26 +74,13 @@ export const infouser = async (req, res) => {
 
 export const refreshToken = async (req, res) => {
   try {
-    const refreshTokenCookie = req.cookies.refreshToken;
-    if (!refreshTokenCookie) throw new Error("No existe el token");
-
-    const { uid } = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH);
-
-    const token = generateToken(uid);
+    const token = generateToken(req.uid);
     res.json(token);
   } catch (error) {
-    console.log(error.message);
-    const TokenVerificationErrors = {
-      "invalid signature": "La firma del JWT no es válida",
-      "jwt expired": "JWT expirado",
-      "invalid token": "Token no valido",
-      "No Bearer": "Utiliza formato Bearer",
-      "jwt malformed": "JWT formato no valido",
-    };
-
+    console.log(error);
     return res
-      .status(401)
-      .json({ error: TokenVerificationErrors[error.message] });
+      .status(500)
+      .json({ error: "Error de servidor", msg: error.message });
   }
 };
 
